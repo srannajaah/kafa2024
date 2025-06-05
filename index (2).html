@@ -1,0 +1,228 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Semakan Markah KAFA Pelajar Tahun 4A</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-blue-900 text-white py-6 shadow-lg">
+            <div class="container mx-auto px-4">
+                <h1 class="text-3xl font-bold text-center">Portal Semakan Markah KAFA Pelajar Tahun 4A</h1>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8 flex-grow">
+            <div class="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto">
+                <!-- Input Form -->
+                <div class="mb-6">
+                    <label for="studentName" class="block text-lg font-medium text-gray-700 mb-2">Nama Pelajar</label>
+                    <input type="text" id="studentName" placeholder="Masukkan nama pelajar" class="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button onclick="searchStudent()" class="mt-4 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition">Semak Markah</button>
+                </div>
+
+                <!-- Results Section -->
+                <div id="results" class="hidden">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Keputusan Pelajar</h2>
+                    <div id="studentInfo" class="mb-4"></div>
+                    <table class="w-full border-collapse mb-6">
+                        <thead>
+                            <tr class="bg-blue-100">
+                                <th class="border p-3 text-left">Subjek</th>
+                                <th class="border p-3 text-center">Markah</th>
+                                <th class="border p-3 text-center">Gred</th>
+                            </tr>
+                        </thead>
+                        <tbody id="marksTable"></tbody>
+                    </table>
+                    <div id="summary" class="mb-4"></div>
+                    <button onclick="generatePDF()" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition">Jana Laporan PDF</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-blue-900 text-white py-4">
+            <div class="container mx-auto px-4 text-center">
+                <p>&copy; 2025 Portal Semakan Markah KAFA. Hak Cipta Terpelihara.</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        const studentData = [
+            {"BIL":1,"NAMA":"ADEEF IZZYHAN BIN MOHD ASFAHIZAN","AQ":86,"G_AQ":"A","AS":90,"G_AS":"A","PCHI":88,"G_PCHI":"A","AKDH":89,"G_AKDH":"A","IBDH":83,"G_IBDH":"A","ADB":91,"G_ADB":"A","SIRH":86,"G_SIRH":"A","JW":98,"G_JW":"A","BA":82,"G_BA":"A","JUM":793,"%":0.8811111111,"KDK":2},
+            {"BIL":2,"NAMA":"AHMAD ADAM KHALEEF B AHMAD SHAHIR","AQ":88,"G_AQ":"A","AS":92,"G_AS":"A","PCHI":81,"G_PCHI":"A","AKDH":69,"G_AKDH":"B","IBDH":90,"G_IBDH":"A","ADB":94,"G_ADB":"A","SIRH":83,"G_SIRH":"A","JW":92,"G_JW":"A","BA":85,"G_BA":"A","JUM":774,"%":0.86,"KDK":4},
+            {"BIL":3,"NAMA":"AHMAD UWAIS AL QARNI B AHMAD DASUKI","AQ":88,"G_AQ":"A","AS":89,"G_AS":"A","PCHI":83,"G_PCHI":"A","AKDH":82,"G_AKDH":"A","IBDH":87,"G_IBDH":"A","ADB":82,"G_ADB":"A","SIRH":76,"G_SIRH":"B","JW":90,"G_JW":"A","BA":81,"G_BA":"A","JUM":758,"%":0.8422222222,"KDK":8},
+            {"BIL":4,"NAMA":"MUHAMAD AFIF DARWISY B MOHD AZLEYZAN","AQ":82,"G_AQ":"A","AS":79,"G_AS":"B","PCHI":80,"G_PCHI":"A","AKDH":96,"G_AKDH":"A","IBDH":80,"G_IBDH":"A","ADB":89,"G_ADB":"A","SIRH":77,"G_SIRH":"B","JW":94,"G_JW":"A","BA":75,"G_BA":"B","JUM":752,"%":0.8355555556,"KDK":10},
+            {"BIL":5,"NAMA":"MUHAMAD EZZUDIN MUADZ B MOHD FAIZ","AQ":80,"G_AQ":"A","AS":84,"G_AS":"A","PCHI":85,"G_PCHI":"A","AKDH":91,"G_AKDH":"A","IBDH":73,"G_IBDH":"B","ADB":80,"G_ADB":"A","SIRH":68,"G_SIRH":"B","JW":82,"G_JW":"A","BA":76,"G_BA":"B","JUM":719,"%":0.7988888889,"KDK":13},
+            {"BIL":6,"NAMA":"MUHAMMAD ADAM B MUHAMAD NAIM","AQ":91,"G_AQ":"A","AS":83,"G_AS":"A","PCHI":80,"G_PCHI":"A","AKDH":92,"G_AKDH":"A","IBDH":78,"G_IBDH":"B","ADB":96,"G_ADB":"A","SIRH":75,"G_SIRH":"B","JW":84,"G_JW":"A","BA":78,"G_BA":"B","JUM":757,"%":0.8411111111,"KDK":9},
+            {"BIL":7,"NAMA":"MUHAMMAD ADAM DANISH BIN MOHD FIRDAUS","AQ":96,"G_AQ":"A","AS":93,"G_AS":"A","PCHI":89,"G_PCHI":"A","AKDH":60,"G_AKDH":"C","IBDH":64,"G_IBDH":"C","ADB":77,"G_ADB":"B","SIRH":56,"G_SIRH":"C","JW":96,"G_JW":"A","BA":42,"G_BA":"D","JUM":673,"%":0.7477777778,"KDK":21},
+            {"BIL":8,"NAMA":"MUHAMMAD ADIB NASRULLAH B MOHD RIDZUAN","AQ":85,"G_AQ":"A","AS":80,"G_AS":"A","PCHI":92,"G_PCHI":"A","AKDH":68,"G_AKDH":"B","IBDH":58,"G_IBDH":"C","ADB":84,"G_ADB":"A","SIRH":58,"G_SIRH":"C","JW":92,"G_JW":"A","BA":43,"G_BA":"D","JUM":660,"%":0.7333333333,"KDK":23},
+            {"BIL":9,"NAMA":"MUHAMMAD ADLI ZAFRI BIN ABD AZIZ","AQ":88,"G_AQ":"A","AS":79,"G_AS":"B","PCHI":80,"G_PCHI":"A","AKDH":78,"G_AKDH":"B","IBDH":72,"G_IBDH":"B","ADB":65,"G_ADB":"B","SIRH":68,"G_SIRH":"B","JW":84,"G_JW":"A","BA":58,"G_BA":"C","JUM":672,"%":0.7466666667,"KDK":22},
+            {"BIL":10,"NAMA":"MUHAMMAD AISH DANIEL B MUHAMAD HAKIMI","AQ":86,"G_AQ":"A","AS":81,"G_AS":"A","PCHI":83,"G_PCHI":"A","AKDH":65,"G_AKDH":"B","IBDH":72,"G_IBDH":"B","ADB":95,"G_ADB":"A","SIRH":72,"G_SIRH":"B","JW":92,"G_JW":"A","BA":59,"G_BA":"C","JUM":705,"%":0.7833333333,"KDK":15},
+            {"BIL":11,"NAMA":"MUHAMMAD AISY HARRAZ B ABDUL HADI","AQ":77,"G_AQ":"B","AS":80,"G_AS":"A","PCHI":77,"G_PCHI":"B","AKDH":83,"G_AKDH":"A","IBDH":60,"G_IBDH":"C","ADB":82,"G_ADB":"A","SIRH":78,"G_SIRH":"B","JW":86,"G_JW":"A","BA":66,"G_BA":"B","JUM":689,"%":0.7655555556,"KDK":16},
+            {"BIL":12,"NAMA":"MUHAMMAD AL FATEH B MOHD FUAD","AQ":83,"G_AQ":"A","AS":76,"G_AS":"B","PCHI":81,"G_PCHI":"A","AKDH":83,"G_AKDH":"A","IBDH":48,"G_IBDH":"D","ADB":89,"G_ADB":"A","SIRH":74,"G_SIRH":"B","JW":74,"G_JW":"B","BA":77,"G_BA":"B","JUM":685,"%":0.7611111111,"KDK":18},
+            {"BIL":13,"NAMA":"MUHAMMAD ANAS B MUHAMMAD ZULKIFLI","AQ":88,"G_AQ":"A","AS":81,"G_AS":"A","PCHI":87,"G_PCHI":"A","AKDH":97,"G_AKDH":"A","IBDH":84,"G_IBDH":"A","ADB":87,"G_ADB":"A","SIRH":66,"G_SIRH":"B","JW":92,"G_JW":"A","BA":82,"G_BA":"A","JUM":764,"%":0.8488888889,"KDK":6},
+            {"BIL":14,"NAMA":"MUHAMMAD ANAS B ZAINUDIN","AQ":80,"G_AQ":"A","AS":80,"G_AS":"A","PCHI":84,"G_PCHI":"A","AKDH":65,"G_AKDH":"B","IBDH":76,"G_IBDH":"B","ADB":69,"G_ADB":"B","SIRH":50,"G_SIRH":"C","JW":88,"G_JW":"A","BA":35,"G_BA":"E","JUM":627,"%":0.6966666667,"KDK":24},
+            {"BIL":15,"NAMA":"MUHAMMAD FARHAN MIKAEL B ANUAR","AQ":88,"G_AQ":"A","AS":93,"G_AS":"A","PCHI":80,"G_PCHI":"A","AKDH":94,"G_AKDH":"A","IBDH":61,"G_IBDH":"C","ADB":88,"G_ADB":"A","SIRH":79,"G_SIRH":"B","JW":90,"G_JW":"A","BA":76,"G_BA":"B","JUM":749,"%":0.8322222222,"KDK":11},
+            {"BIL":16,"NAMA":"MUHAMMAD HARIEZ HARIRY B MOHD FARIZUL","AQ":72,"G_AQ":"B","AS":95,"G_AS":"A","PCHI":80,"G_PCHI":"A","AKDH":80,"G_AKDH":"A","IBDH":78,"G_IBDH":"B","ADB":72,"G_ADB":"B","SIRH":56,"G_SIRH":"C","JW":82,"G_JW":"A","BA":59,"G_BA":"C","JUM":674,"%":0.7488888889,"KDK":20},
+            {"BIL":17,"NAMA":"MUHAMMAD HASBIALLAH B MOHD HANIF","AQ":94,"G_AQ":"A","AS":97,"G_AS":"A","PCHI":88,"G_PCHI":"A","AKDH":91,"G_AKDH":"A","IBDH":82,"G_IBDH":"A","ADB":94,"G_ADB":"A","SIRH":73,"G_SIRH":"B","JW":68,"G_JW":"B","BA":88,"G_BA":"A","JUM":775,"%":0.8611111111,"KDK":3},
+            {"BIL":18,"NAMA":"MUHAMMAD ZHARIF RIFQIY B MOHD RAZIF","AQ":85,"G_AQ":"A","AS":89,"G_AS":"A","PCHI":80,"G_PCHI":"A","AKDH":80,"G_AKDH":"A","IBDH":67,"G_IBDH":"B","ADB":67,"G_ADB":"B","SIRH":59,"G_SIRH":"C","JW":96,"G_JW":"A","BA":87,"G_BA":"A","JUM":710,"%":0.7888888889,"KDK":14},
+            {"BIL":19,"NAMA":"NOR IZZ DANIYAL B NORSHARYADI","AQ":54,"G_AQ":"C","AS":73,"G_AS":"B","PCHI":94,"G_PCHI":"A","AKDH":82,"G_AKDH":"A","IBDH":54,"G_IBDH":"C","ADB":82,"G_ADB":"A","SIRH":47,"G_SIRH":"D","JW":64,"G_JW":"C","BA":24,"G_BA":"E","JUM":574,"%":0.6377777778,"KDK":26},
+            {"BIL":20,"NAMA":"AHLAM ZULAIKHA BT MOHAMAD ZALMI","AQ":92,"G_AQ":"A","AS":79,"G_AS":"B","PCHI":83,"G_PCHI":"A","AKDH":87,"G_AKDH":"A","IBDH":74,"G_IBDH":"B","ADB":81,"G_ADB":"A","SIRH":69,"G_SIRH":"B","JW":90,"G_JW":"A","BA":65,"G_BA":"B","JUM":720,"%":0.8,"KDK":12},
+            {"BIL":21,"NAMA":"AISYAH INSYIRAH BT MOHAMAD NOOR AZIZI","AQ":82,"G_AQ":"A","AS":76,"G_AS":"B","PCHI":85,"G_PCHI":"A","AKDH":67,"G_AKDH":"B","IBDH":65,"G_IBDH":"B","ADB":84,"G_ADB":"A","SIRH":59,"G_SIRH":"C","JW":94,"G_JW":"A","BA":73,"G_BA":"B","JUM":685,"%":0.7611111111,"KDK":18},
+            {"BIL":22,"NAMA":"AQILAH SAFIYYAH BT FAKHRULRAZI","AQ":89,"G_AQ":"A","AS":96,"G_AS":"A","PCHI":91,"G_PCHI":"A","AKDH":95,"G_AKDH":"A","IBDH":70,"G_IBDH":"B","ADB":88,"G_ADB":"A","SIRH":69,"G_SIRH":"B","JW":92,"G_JW":"A","BA":70,"G_BA":"B","JUM":760,"%":0.8444444444,"KDK":7},
+            {"BIL":23,"NAMA":"FHYA ARIESYAQEELA HUMAIRA BT MOHD YAZID","AQ":70,"G_AQ":"B","AS":71,"G_AS":"B","PCHI":78,"G_PCHI":"B","AKDH":64,"G_AKDH":"C","IBDH":60,"G_IBDH":"C","ADB":89,"G_ADB":"A","SIRH":49,"G_SIRH":"D","JW":88,"G_JW":"A","BA":50,"G_BA":"C","JUM":619,"%":0.6877777778,"KDK":25},
+            {"BIL":24,"NAMA":"LEEYA ZAFIRAH BT JAFFRY","AQ":87,"G_AQ":"A","AS":83,"G_AS":"A","PCHI":89,"G_PCHI":"A","AKDH":94,"G_AKDH":"A","IBDH":80,"G_IBDH":"A","ADB":93,"G_ADB":"A","SIRH":70,"G_SIRH":"B","JW":92,"G_JW":"A","BA":80,"G_BA":"A","JUM":768,"%":0.8533333333,"KDK":5},
+            {"BIL":25,"NAMA":"NUR FAZILA FAYZA BINTI MOHD ZAHIR","AQ":87,"G_AQ":"A","AS":90,"G_AS":"A","PCHI":82,"G_PCHI":"A","AKDH":65,"G_AKDH":"B","IBDH":70,"G_IBDH":"B","ADB":73,"G_ADB":"B","SIRH":65,"G_SIRH":"B","JW":94,"G_JW":"A","BA":60,"G_BA":"C","JUM":686,"%":0.7622222222,"KDK":17},
+            {"BIL":26,"NAMA":"NUR ZAFIRAH BT AMRAN YUSRI","AQ":91,"G_AQ":"A","AS":98,"G_AS":"A","PCHI":89,"G_PCHI":"A","AKDH":97,"G_AKDH":"A","IBDH":85,"G_IBDH":"A","ADB":93,"G_ADB":"A","SIRH":86,"G_SIRH":"A","JW":97,"G_JW":"A","BA":95,"G_BA":"A","JUM":831,"%":0.9233333333,"KDK":1}
+        ];
+
+        function searchStudent() {
+            const input = document.getElementById('studentName').value.trim().toUpperCase();
+            const resultDiv = document.getElementById('results');
+            const studentInfoDiv = document.getElementById('studentInfo');
+            const marksTable = document.getElementById('marksTable');
+            const summaryDiv = document.getElementById('summary');
+
+            if (!input) {
+                alert('Sila masukkan nama pelajar.');
+                return;
+            }
+
+            const student = studentData.find(s => s.NAMA.toUpperCase().includes(input));
+            if (!student) {
+                alert('Nama pelajar tidak ditemui.');
+                resultDiv.classList.add('hidden');
+                return;
+            }
+
+            // Display student information
+            studentInfoDiv.innerHTML = `
+                <p class="text-lg"><strong>Nama Pelajar:</strong> ${student.NAMA}</p>
+            `;
+
+            // Display marks and grades
+            marksTable.innerHTML = `
+                <tr><td class="border p-3">Al-Quran (AQ)</td><td class="border p-3 text-center">${student.AQ}</td><td class="border p-3 text-center">${student.G_AQ}</td></tr>
+                <tr><td class="border p-3">Asas Syariah (AS)</td><td class="border p-3 text-center">${student.AS}</td><td class="border p-3 text-center">${student.G_AS}</td></tr>
+                <tr><td class="border p-3">Pendidikan Adab dan Akhlak Islam (PCHI)</td><td class="border p-3 text-center">${student.PCHI}</td><td class="border p-3 text-center">${student.G_PCHI}</td></tr>
+                <tr><td class="border p-3">Akidah (AKDH)</td><td class="border p-3 text-center">${student.AKDH}</td><td class="border p-3 text-center">${student.G_AKDH}</td></tr>
+                <tr><td class="border p-3">Ibadah (IBDH)</td><td class="border p-3 text-center">${student.IBDH}</td><td class="border p-3 text-center">${student.G_IBDH}</td></tr>
+                <tr><td class="border p-3">Adab (ADB)</td><td class="border p-3 text-center">${student.ADB}</td><td class="border p-3 text-center">${student.G_ADB}</td></tr>
+                <tr><td class="border p-3">Sirah (SIRH)</td><td class="border p-3 text-center">${student.SIRH}</td><td class="border p-3 text-center">${student.G_SIRH}</td></tr>
+                <tr><td class="border p-3">Jawi (JW)</td><td class="border p-3 text-center">${student.JW}</td><td class="border p-3 text-center">${student.G_JW}</td></tr>
+                <tr><td class="border p-3">Bahasa Arab (BA)</td><td class="border p-3 text-center">${student.BA}</td><td class="border p-3 text-center">${student.G_BA}</td></tr>
+            `;
+
+            // Display summary
+            summaryDiv.innerHTML = `
+                <p class="text-lg"><strong>Jumlah Markah:</strong> ${student.JUM}</p>
+                <p class="text-lg"><strong>Peratusan:</strong> ${(student['%'] * 100).toFixed(2)}%</p>
+                <p class="text-lg"><strong>Kedudukan (KDK):</strong> ${student.KDK}</p>
+            `;
+
+            resultDiv.classList.remove('hidden');
+        }
+
+        function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const input = document.getElementById('studentName').value.trim().toUpperCase();
+            const student = studentData.find(s => s.NAMA.toUpperCase().includes(input));
+
+            if (!student) {
+                alert('Sila semak markah pelajar terlebih dahulu.');
+                return;
+            }
+
+            // PDF Header
+            doc.setFontSize(16);
+            doc.text('Laporan Markah KAFA Tahun 4A', 105, 20, { align: 'center' });
+            doc.setFontSize(12);
+            doc.text(`Nama Pelajar: ${student.NAMA}`, 20, 30);
+            doc.text(`Kedudukan: ${student.KDK}`, 20, 40);
+
+            // Table Header
+            doc.setFontSize(10);
+            doc.text('Subjek', 20, 50);
+            doc.text('Markah', 100, 50);
+            doc.text('Gred', 130, 50);
+            doc.line(20, 52, 190, 52);
+
+            // Table Content
+            const subjects = [
+                { name: 'Al-Quran (AQ)', mark: student.AQ, grade: student.G_AQ },
+                { name: 'Asas Syariah (AS)', mark: student.AS, grade: student.G_AS },
+                { name: 'Pendidikan Adab dan Akhlak Islam (PCHI)', mark: student.PCHI, grade: student.G_PCHI },
+                { name: 'Akidah (AKDH)', mark: student.AKDH, grade: student.G_AKDH },
+                { name: 'Ibadah (IBDH)', mark: student.IBDH, grade: student.G_IBDH },
+                { name: 'Adab (ADB)', mark: student.ADB, grade: student.G_ADB },
+                { name: 'Sirah (SIRH)', mark: student.SIRH, grade: student.G_SIRH },
+                { name: 'Jawi (JW)', mark: student.JW, grade: student.G_JW },
+                { name: 'Bahasa Arab (BA)', mark: student.BA, grade: student.G_BA }
+            ];
+
+            let y = 60;
+            subjects.forEach(subject => {
+                doc.text(subject.name, 20, y);
+                doc.text(subject.mark.toString(), 100, y);
+                doc.text(subject.grade, 130, y);
+                y += 10;
+            });
+
+            // Summary
+            doc.text(`Jumlah Markah: ${student.JUM}`, 20, y);
+            doc.text(`Peratusan: ${(student['%'] * 100).toFixed(2)}%`, 20, y + 10);
+
+            // Save PDF
+            doc.save(`Laporan_Markah_${student.NAMA}.pdf`);
+        }
+    </script>
+</body>
+</html>
